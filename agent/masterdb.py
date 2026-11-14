@@ -158,11 +158,44 @@ def write(op, col, doc_id, data=None, if_version=None, quiet=False):
     return rows[0]["version"]
 
 
+def ask_window():
+    """Male okno z jednym polem na klucz — wygodniejsze niz wklejanie w terminalu."""
+    import tkinter as tk
+    out = {"key": ""}
+    w = tk.Tk()
+    w.title("MASTER - klucz bazy")
+    w.attributes("-topmost", True)
+    w.resizable(False, False)
+    tk.Label(w, text="Wklej klucz tajny Supabase (Ctrl+V) i kliknij Zapisz.\nKlucz zaczyna sie od sb_secret_", justify="left", padx=16, pady=12).pack(anchor="w")
+    e = tk.Entry(w, width=56, show="*")
+    e.pack(padx=16)
+    e.focus_force()
+    def ok(_=None):
+        out["key"] = e.get()
+        w.destroy()
+    row = tk.Frame(w)
+    row.pack(pady=12)
+    tk.Button(row, text="Zapisz", width=14, command=ok).pack(side="left", padx=6)
+    tk.Button(row, text="Anuluj", width=14, command=w.destroy).pack(side="left", padx=6)
+    w.bind("<Return>", ok)
+    w.update_idletasks()
+    w.geometry(f"+{(w.winfo_screenwidth() - w.winfo_width()) // 2}+{(w.winfo_screenheight() - w.winfo_height()) // 3}")
+    w.mainloop()
+    return out["key"]
+
+
 def cmd_login(a):
-    print("Supabase -> Settings -> API Keys -> Secret keys -> skopiuj klucz (zaczyna sie od sb_secret_).")
-    key = getpass.getpass("Wklej klucz tajny (nie bedzie widoczny) i nacisnij Enter: ").strip()
+    if a.okno:
+        print("Otwieram okienko 'MASTER - klucz bazy' — wklej klucz i kliknij Zapisz.", flush=True)
+        key = ask_window()
+    else:
+        print("Supabase -> Settings -> API Keys -> Secret keys -> skopiuj klucz (zaczyna sie od sb_secret_).")
+        key = getpass.getpass("Wklej klucz tajny (nie bedzie widoczny) i nacisnij Enter: ")
+    key = "".join(key.split())  # bez spacji i zlaman wiersza po wklejeniu
     if not key:
         die("pusty klucz")
+    if not key.startswith("sb_secret_") and not key.startswith("eyJ"):
+        die("to nie wyglada na klucz tajny (powinien zaczynac sie od sb_secret_)")
     cfg = (a.url or DEFAULT_URL).rstrip("/"), key
     rows = call("GET", "docs?select=id&limit=1", cfg=cfg)
     CONFIG.parent.mkdir(parents=True, exist_ok=True)
@@ -241,7 +274,7 @@ def cmd_import(a):
 def main():
     p = argparse.ArgumentParser(description="Baza MASTER w chmurze — narzedzie agentow", epilog="Przyklady: patrz naglowek pliku.")
     s = p.add_subparsers(dest="cmd", required=True)
-    x = s.add_parser("login"); x.add_argument("--url"); x.set_defaults(fn=cmd_login)
+    x = s.add_parser("login"); x.add_argument("--url"); x.add_argument("--okno", action="store_true", help="pokaz okno do wklejenia klucza"); x.set_defaults(fn=cmd_login)
     x = s.add_parser("get"); x.add_argument("collection"); x.add_argument("id"); x.set_defaults(fn=cmd_get)
     x = s.add_parser("list"); x.add_argument("collection"); x.add_argument("--where", action="append"); x.add_argument("--fields"); x.add_argument("--out"); x.add_argument("--limit", type=int); x.set_defaults(fn=cmd_list)
     x = s.add_parser("collections"); x.set_defaults(fn=cmd_collections)
